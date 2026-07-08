@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CS2 Lineup Vault</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <section class="login-screen" id="loginScreen" aria-label="Connexion">
+      <form class="login-card" id="loginForm" autocomplete="off">
+        <p class="eyebrow">Acces prive</p>
+        <h1>CS2 Lineup Vault</h1>
+        <p class="login-copy">Connecte-toi pour acceder aux lineups et gerer la base JSON.</p>
+
+        <label>
+          Identifiant
+          <input id="loginUser" name="username" type="text" autocomplete="username" required placeholder="Ton identifiant">
+        </label>
+
+        <label>
+          Mot de passe
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="Ton mot de passe">
+        </label>
+
+        <p class="login-error" id="loginError" role="alert" aria-live="polite"></p>
+        <button class="button primary login-submit" type="submit">Connexion</button>
+      </form>
+    </section>
+
+    <div class="app-shell" id="appShell" hidden>
+    <header class="topbar">
+      <div>
+        <h1>CS2 Lineup Vault</h1>
+      </div>
+      <div class="top-actions">
+        <span class="session-pill" id="sessionUser"></span>
+        <button class="button primary" id="addLineupBtn" type="button">+ Ajouter</button>
+        <button class="button" id="exportBtn" type="button">Exporter JSON</button>
+        <label class="button" for="importInput">Importer JSON</label>
+        <input class="sr-only" id="importInput" type="file" accept=".json,application/json">
+        <button class="button ghost" id="resetBtn" type="button">Recharger JSON</button>
+        <button class="button ghost" id="logoutBtn" type="button">Deconnexion</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="search-panel" aria-label="Recherche de lineups">
+        <div class="search-row">
+          <label class="sr-only" for="searchInput">Rechercher une lineup</label>
+          <input id="searchInput" type="search" placeholder="Cherche map, spot, smoke, résultat... même avec des fautes">
+          <button class="icon-button" id="clearSearchBtn" type="button" aria-label="Effacer la recherche">x</button>
+        </div>
+        <div class="status-row">
+          <span id="aiStatus"></span>
+          <span id="storageStatus">Chargement du JSON...</span>
+        </div>
+        <div class="filters" id="mapFilters" aria-label="Filtres par map"></div>
+      </section>
+
+      <section class="workspace">
+        <aside class="list-pane" aria-label="Liste des lineups">
+          <div class="pane-heading">
+            <h2>Lineups</h2>
+            <span id="resultCount">0</span>
+          </div>
+          <div class="lineup-list" id="lineupList"></div>
+        </aside>
+
+        <section class="detail-pane" id="detailPane" aria-live="polite">
+          <div class="empty-state">
+            <h2>Aucune lineup sélectionnée</h2>
+            <p>Ajoute une lineup ou sélectionne un résultat dans la liste.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="lineupDialog">
+      <form id="lineupForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Nouvelle entrée</p>
+            <h2 id="dialogTitle">Ajouter une lineup</h2>
+          </div>
+          <button class="icon-button" id="closeDialogBtn" type="button" aria-label="Fermer">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Nom
+            <input id="nameInput" name="name" required maxlength="90" placeholder="Smoke Jungle depuis T spawn">
+          </label>
+          <label>
+            Map
+            <input id="mapInput" name="map" required list="mapOptions" maxlength="40" placeholder="Mirage">
+          </label>
+          <label>
+            Lieu
+            <input id="placeInput" name="place" required maxlength="90" placeholder="T spawn, banana, ramp...">
+          </label>
+          <label>
+            Tags
+            <input id="tagsInput" name="tags" maxlength="160" placeholder="smoke, jungle, execute A">
+          </label>
+        </div>
+
+        <label>
+          Description
+          <textarea id="descriptionInput" name="description" rows="3" placeholder="Pourquoi utiliser cette lineup, dans quel round, contre quelle position..."></textarea>
+        </label>
+
+        <label>
+          Instructions
+          <textarea id="instructionsInput" name="instructions" rows="5" required placeholder="1. Place-toi...\n2. Vise...\n3. Lance..."></textarea>
+        </label>
+
+        <label>
+          Résultat attendu
+          <textarea id="resultInput" name="result" rows="3" placeholder="La grenade bloque la vision, force un déplacement, ouvre un passage..."></textarea>
+        </label>
+
+        <div class="upload-grid">
+          <div class="upload-box" data-image-field="place" tabindex="0" role="group" aria-label="Photo du lieu">
+            <span class="upload-title">Photo du lieu</span>
+            <input id="placeImageInput" type="file" accept="image/*">
+            <span class="preview" id="placePreview">Aucune image</span>
+            <span class="upload-hint">Clique ici puis colle une image avec Ctrl+V</span>
+          </div>
+          <div class="upload-box" data-image-field="position" tabindex="0" role="group" aria-label="Photo ou il faut etre">
+            Photo où il faut être
+            <input id="positionImageInput" type="file" accept="image/*">
+            <span class="preview" id="positionPreview">Aucune image</span>
+            <span class="upload-hint">Clique ici puis colle une image avec Ctrl+V</span>
+          </div>
+          <div class="upload-box" data-image-field="aim" tabindex="0" role="group" aria-label="Photo ou il faut viser">
+            Photo où il faut viser
+            <input id="aimImageInput" type="file" accept="image/*">
+            <span class="preview" id="aimPreview">Aucune image</span>
+            <span class="upload-hint">Clique ici puis colle une image avec Ctrl+V</span>
+          </div>
+          <div class="upload-box" data-image-field="result" tabindex="0" role="group" aria-label="Photo du resultat">
+            Photo du résultat
+            <input id="resultImageInput" type="file" accept="image/*">
+            <span class="preview" id="resultPreview">Aucune image</span>
+            <span class="upload-hint">Clique ici puis colle une image avec Ctrl+V</span>
+          </div>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="button ghost" id="cancelBtn" type="button">Annuler</button>
+          <button class="button primary" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <datalist id="mapOptions">
+      <option value="Ancient"></option>
+      <option value="Anubis"></option>
+      <option value="Cache"></option>
+      <option value="Dust II"></option>
+      <option value="Inferno"></option>
+      <option value="Mirage"></option>
+      <option value="Nuke"></option>
+      <option value="Overpass"></option>
+      <option value="Train"></option>
+      <option value="Vertigo"></option>
+    </datalist>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "schema": "cs2-lineups-v1",
+  "updatedAt": "2026-07-08T00:00:00.000Z",
+  "lineups": [
+    {
+      "id": "demo-mirage-smoke-jungle",
+      "name": "Exemple : Smoke Jungle depuis T spawn",
+      "description": "Exemple de fiche pour montrer le format. Remplace les infos par une vraie lineup verifiee avant de partager le JSON.",
+      "map": "Mirage",
+      "place": "T spawn",
+      "instructions": "1. Place-toi au T spawn.\n2. Aligne ton viseur avec le repere choisi.\n3. Lance la smoke en jumpthrow.",
+      "result": "La smoke doit bloquer Jungle pour faciliter une prise mid ou une exec A.",
+      "tags": ["smoke", "jungle", "mid", "demo"],
+      "images": {
+        "place": "",
+        "position": "",
+        "aim": "",
+        "result": ""
+      },
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z"
+    },
+    {
+      "id": "demo-inferno-molotov-dark",
+      "name": "Exemple : Molotov Dark depuis banana",
+      "description": "Exemple de fiche pour un nettoyage de position. Ajoute tes captures CS2 pour rendre la lineup exploitable.",
+      "map": "Inferno",
+      "place": "Banana",
+      "instructions": "1. Bloque-toi sur le coin indique.\n2. Vise le repere sur le mur.\n3. Lance en clic gauche.",
+      "result": "La molotov force le joueur cache a Dark a sortir ou a reculer.",
+      "tags": ["molotov", "banana", "dark", "demo"],
+      "images": {
+        "place": "",
+        "position": "",
+        "aim": "",
+        "result": ""
+      },
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z"
+    },
+    {
+      "id": "demo-dust2-smoke-xbox",
+      "name": "Exemple : Smoke Xbox depuis T spawn",
+      "description": "Exemple de structure pour Dust II. Le resultat depend du tick, de la position exacte et du lancer.",
+      "map": "Dust II",
+      "place": "T spawn",
+      "instructions": "1. Positionne-toi sur le repere.\n2. Vise le haut du batiment.\n3. Lance avec un jumpthrow.",
+      "result": "La smoke couvre Xbox pour passer catwalk plus facilement.",
+      "tags": ["smoke", "xbox", "catwalk", "demo"],
+      "images": {
+        "place": "",
+        "position": "",
+        "aim": "",
+        "result": ""
+      },
+      "createdAt": "2026-07-08T00:00:00.000Z",
+      "updatedAt": "2026-07-08T00:00:00.000Z"
+    }
+  ]
+}
