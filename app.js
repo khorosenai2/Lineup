@@ -862,10 +862,11 @@ function closeGitHubDialog() {
 
 function saveGitHubSettingsFromForm(event) {
   event.preventDefault();
+  const repoInfo = parseGitHubRepoInputs(els.githubOwnerInput.value, els.githubRepoInput.value);
 
   const settings = {
-    owner: els.githubOwnerInput.value.trim(),
-    repo: els.githubRepoInput.value.trim(),
+    owner: repoInfo.owner,
+    repo: repoInfo.repo,
     branch: els.githubBranchInput.value.trim() || "main",
     path: normalizeGitHubPath(els.githubPathInput.value),
     rememberToken: els.rememberGitHubTokenInput.checked
@@ -974,11 +975,11 @@ async function commitLineupsToGitHub(settings, token, sha, lineups) {
     body.sha = sha;
   }
 
-  return fetch(githubContentUrl(settings), {
+  return fetchGitHub(githubContentUrl(settings), {
     method: "PUT",
-    headers: githubHeaders(token),
+    headers: githubHeaders(token, { json: true, version: true }),
     body: JSON.stringify(body)
-  });
+  }, "l'envoi de la sauvegarde");
 }
 
 async function getGitHubFileSha(settings, token) {
@@ -987,12 +988,16 @@ async function getGitHubFileSha(settings, token) {
 }
 
 async function getGitHubFileInfo(settings, token) {
-  const response = await fetch(`${githubContentUrl(settings)}?ref=${encodeURIComponent(settings.branch)}`, {
+  const response = await fetchGitHub(`${githubContentUrl(settings)}?ref=${encodeURIComponent(settings.branch)}`, {
     headers: githubHeaders(token)
-  });
+  }, "la recuperation de la base");
 
   if (response.status === 404) {
-    return null;
+    return {
+      sha: null,
+      lineups: [],
+      payload: { lineups: [] }
+    };
   }
 
   if (!response.ok) {
@@ -1020,9 +1025,9 @@ async function readGitHubFilePayload(payload, token) {
   }
 
   if (payload.download_url) {
-    const response = await fetch(payload.download_url, {
+    const response = await fetchGitHub(payload.download_url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
-    });
+    }, "la lecture de la base");
 
     if (!response.ok) {
       throw new Error(`GitHub: lecture de la base impossible (${response.status}).`);
@@ -1097,18 +1102,47 @@ function githubContentUrl(settings) {
   return `https://api.github.com/repos/${encodeURIComponent(settings.owner)}/${encodeURIComponent(settings.repo)}/contents/${encodeGitHubPath(settings.path)}`;
 }
 
-function githubHeaders(token) {
+function githubHeaders(token, options = {}) {
   const headers = {
-    Accept: "application/vnd.github+json",
-    "Content-Type": "application/json",
-    "X-GitHub-Api-Version": GITHUB_API_VERSION
+    Accept: "application/vnd.github+json"
   };
+
+  if (options.json) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  if (options.version) {
+    headers["X-GitHub-Api-Version"] = GITHUB_API_VERSION;
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
   return headers;
+}
+
+async function fetchGitHub(url, options, actionLabel) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    throw new Error(buildGitHubNetworkMessage(actionLabel));
+  }
+}
+
+function buildGitHubNetworkMessage(actionLabel) {
+  const hints = [`GitHub inaccessible pendant ${actionLabel}.`];
+
+  if (location.protocol === "file:") {
+    hints.push("Ouvre le site via GitHub Pages, pas en double-cliquant index.html.");
+  }
+
+  if (navigator.onLine === false) {
+    hints.push("Ton navigateur semble hors ligne.");
+  }
+
+  hints.push("Verifie internet, le token, le repo, ou un bloqueur/VPN qui peut bloquer api.github.com.");
+  return hints.join(" ");
 }
 
 async function readGitHubError(response) {
@@ -1118,6 +1152,33 @@ async function readGitHubError(response) {
   } catch (error) {
     return `GitHub HTTP ${response.status}`;
   }
+}
+
+function parseGitHubRepoInputs(ownerValue, repoValue) {
+  const owner = String(ownerValue || "").trim();
+  const repo = String(repoValue || "").trim();
+  const combined = repo ? `${owner}/${repo}` : owner;
+  const fullUrlMatch = combined.match(/github\.com[/:]([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/?#].*)?$/i);
+
+  if (fullUrlMatch) {
+    return {
+      owner: fullUrlMatch[1],
+      repo: fullUrlMatch[2].replace(/\.git$/i, "")
+    };
+  }
+
+  const shorthandMatch = combined.match(/^([^/\s]+)\/([^/\s]+)$/);
+  if (shorthandMatch) {
+    return {
+      owner: shorthandMatch[1],
+      repo: shorthandMatch[2].replace(/\.git$/i, "")
+    };
+  }
+
+  return {
+    owner,
+    repo: repo.replace(/\.git$/i, "")
+  };
 }
 
 function normalizeGitHubPath(path) {
