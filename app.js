@@ -171,6 +171,7 @@ function cacheElements() {
     "logoutBtn",
     "addLineupBtn",
     "pushGitHubBtn",
+    "reloadGitHubBtn",
     "githubSettingsBtn",
     "searchInput",
     "clearSearchBtn",
@@ -226,6 +227,7 @@ function bindEvents() {
   els.logoutBtn.addEventListener("click", logout);
   els.addLineupBtn.addEventListener("click", () => openLineupDialog());
   els.pushGitHubBtn.addEventListener("click", pushJsonToGitHub);
+  els.reloadGitHubBtn.addEventListener("click", reloadFromGitHub);
   els.githubSettingsBtn.addEventListener("click", openGitHubDialog);
   els.searchInput.addEventListener("input", () => {
     state.query = els.searchInput.value;
@@ -824,12 +826,21 @@ function saveLocalLineups() {
   }
 }
 
-function buildJsonPayload() {
+function buildJsonPayload(lineups = state.lineups) {
   return {
     schema: "cs2-lineups-v1",
     exportedAt: new Date().toISOString(),
-    lineups: state.lineups
+    lineups
   };
+}
+
+function applyLineupsFromRemote(lineups) {
+  state.lineups = normalizeLineups(lineups);
+  state.baseLineups = state.lineups;
+  state.selectedId = state.lineups[0]?.id || null;
+  state.hasLocalChanges = false;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ lineups: state.lineups }));
+  render();
 }
 
 function openGitHubDialog() {
@@ -888,29 +899,27 @@ async function pushJsonToGitHub() {
   els.storageStatus.textContent = "Push GitHub en cours...";
 
   try {
-    const sha = await getGitHubFileSha(settings, token);
-    const payload = buildJsonPayload();
-    const content = encodeBase64Utf8(JSON.stringify(payload, null, 2));
-    const body = {
-      message: `Update CS2 lineups - ${new Date().toLocaleString("fr-FR")}`,
-      content,
-      branch: settings.branch
-    };
-
-    if (sha) {
-      body.sha = sha;
-    }
-
-    const response = await fetch(githubContentUrl(settings), {
-      method: "PUT",
-      headers: githubHeaders(token),
-      body: JSON.stringify(body)
-    });
+    let remote = await getGitHubFileInfo(settings, token);
+    let mergedLineups = mergeLineups(remote.lineups, state.lineups);
+    let response = await commitLineupsToGitHub(settings, token, remote.sha, mergedLineups);
 
     if (!response.ok) {
-      throw new Error(await readGitHubError(response));
+      const firstError = await readGitHubError(response);
+
+      if (!isGitHubShaConflict(firstError, response.status)) {
+        throw new Error(firstError);
+      }
+
+      remote = await getGitHubFileInfo(settings, token);
+      mergedLineups = mergeLineups(remote.lineups, mergedLineups);
+      response = await commitLineupsToGitHub(settings, token, remote.sha, mergedLineups);
+
+      if (!response.ok) {
+        throw new Error(await readGitHubError(response));
+      }
     }
 
+    applyLineupsFromRemote(mergedLineups);
     showToast("Sauvegarde envoyee sur GitHub.");
     els.storageStatus.textContent = "Sauvegarde envoyee sur GitHub - deploiement Pages en cours";
   } catch (error) {
@@ -923,7 +932,61 @@ async function pushJsonToGitHub() {
   }
 }
 
+async function reloadFromGitHub() {
+  const settings = loadGitHubSettings();
+  const token = getGitHubToken();
+
+  if (!settings.owner || !settings.repo || !settings.path || !settings.branch) {
+    openGitHubDialog();
+    showToast("Configure GitHub avant de recharger.");
+    return;
+  }
+
+  const originalLabel = els.reloadGitHubBtn.textContent;
+  els.reloadGitHubBtn.disabled = true;
+  els.reloadGitHubBtn.textContent = "Reload...";
+  els.storageStatus.textContent = "Recuperation GitHub en cours...";
+
+  try {
+    const remote = await getGitHubFileInfo(settings, token);
+    const mergedLineups = mergeLineups(remote.lineups, state.lineups);
+    applyLineupsFromRemote(mergedLineups);
+    showToast("Derniere base GitHub recuperee.");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Reload GitHub impossible.");
+    renderStatus(getVisibleLineups());
+  } finally {
+    els.reloadGitHubBtn.disabled = false;
+    els.reloadGitHubBtn.textContent = originalLabel;
+  }
+}
+
+async function commitLineupsToGitHub(settings, token, sha, lineups) {
+  const payload = buildJsonPayload(lineups);
+  const body = {
+    message: `Update CS2 lineups - ${new Date().toLocaleString("fr-FR")}`,
+    content: encodeBase64Utf8(JSON.stringify(payload, null, 2)),
+    branch: settings.branch
+  };
+
+  if (sha) {
+    body.sha = sha;
+  }
+
+  return fetch(githubContentUrl(settings), {
+    method: "PUT",
+    headers: githubHeaders(token),
+    body: JSON.stringify(body)
+  });
+}
+
 async function getGitHubFileSha(settings, token) {
+  const info = await getGitHubFileInfo(settings, token);
+  return info.sha;
+}
+
+async function getGitHubFileInfo(settings, token) {
   const response = await fetch(`${githubContentUrl(settings)}?ref=${encodeURIComponent(settings.branch)}`, {
     headers: githubHeaders(token)
   });
@@ -937,7 +1000,63 @@ async function getGitHubFileSha(settings, token) {
   }
 
   const payload = await response.json();
-  return payload.sha || null;
+  const filePayload = await readGitHubFilePayload(payload, token);
+  const lineups = Array.isArray(filePayload) ? filePayload : filePayload.lineups;
+
+  if (!Array.isArray(lineups)) {
+    throw new Error("GitHub: format de base invalide.");
+  }
+
+  return {
+    sha: payload.sha || null,
+    lineups,
+    payload: filePayload
+  };
+}
+
+async function readGitHubFilePayload(payload, token) {
+  if (payload.content) {
+    return JSON.parse(decodeBase64Utf8(payload.content));
+  }
+
+  if (payload.download_url) {
+    const response = await fetch(payload.download_url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub: lecture de la base impossible (${response.status}).`);
+    }
+
+    return response.json();
+  }
+
+  throw new Error("GitHub: contenu de base introuvable.");
+}
+
+function mergeLineups(remoteLineups, localLineups) {
+  const merged = new Map();
+
+  normalizeLineups(remoteLineups).forEach((lineup) => {
+    merged.set(lineup.id, lineup);
+  });
+
+  normalizeLineups(localLineups).forEach((lineup) => {
+    const current = merged.get(lineup.id);
+    if (!current || getLineupTime(lineup) >= getLineupTime(current)) {
+      merged.set(lineup.id, lineup);
+    }
+  });
+
+  return Array.from(merged.values()).sort((a, b) => sortByUpdatedAt(a, b));
+}
+
+function getLineupTime(lineup) {
+  return new Date(lineup.updatedAt || lineup.createdAt || 0).getTime() || 0;
+}
+
+function isGitHubShaConflict(message, status) {
+  return status === 409 || /does not match|sha/i.test(message);
 }
 
 function loadGitHubSettings() {
@@ -979,12 +1098,17 @@ function githubContentUrl(settings) {
 }
 
 function githubHeaders(token) {
-  return {
+  const headers = {
     Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     "X-GitHub-Api-Version": GITHUB_API_VERSION
   };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
 }
 
 async function readGitHubError(response) {
@@ -1021,6 +1145,13 @@ function encodeBase64Utf8(value) {
   }
 
   return btoa(binary);
+}
+
+function decodeBase64Utf8(value) {
+  const cleanValue = String(value || "").replace(/\s/g, "");
+  const binary = atob(cleanValue);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 async function handleImagePaste(event, key) {
