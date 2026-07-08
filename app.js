@@ -79,7 +79,12 @@ const state = {
   hasLocalChanges: false,
   toastTimer: null,
   authenticatedUser: null,
-  isLoaded: false
+  isLoaded: false,
+  imageViewer: {
+    src: "",
+    title: "",
+    zoom: 1
+  }
 };
 
 const imageFields = {
@@ -193,6 +198,14 @@ function cacheElements() {
     "githubPathInput",
     "githubTokenInput",
     "rememberGitHubTokenInput",
+    "imageViewerDialog",
+    "imageViewerTitle",
+    "imageViewerStage",
+    "imageViewerImg",
+    "zoomOutBtn",
+    "zoomResetBtn",
+    "zoomInBtn",
+    "closeImageViewerBtn",
     "nameInput",
     "mapInput",
     "placeInput",
@@ -246,6 +259,12 @@ function bindEvents() {
   });
 
   els.detailPane.addEventListener("click", (event) => {
+    const imageButton = event.target.closest("[data-image-src]");
+    if (imageButton) {
+      openImageViewer(imageButton.dataset.imageSrc, imageButton.dataset.imageTitle);
+      return;
+    }
+
     const action = event.target.closest("[data-action]");
     if (!action) return;
     const lineup = getSelectedLineup();
@@ -266,6 +285,17 @@ function bindEvents() {
   els.closeGitHubDialogBtn.addEventListener("click", closeGitHubDialog);
   els.cancelGitHubBtn.addEventListener("click", closeGitHubDialog);
   els.githubForm.addEventListener("submit", saveGitHubSettingsFromForm);
+  els.closeImageViewerBtn.addEventListener("click", closeImageViewer);
+  els.zoomOutBtn.addEventListener("click", () => changeImageZoom(-0.25));
+  els.zoomInBtn.addEventListener("click", () => changeImageZoom(0.25));
+  els.zoomResetBtn.addEventListener("click", () => setImageZoom(1));
+  els.imageViewerDialog.addEventListener("click", (event) => {
+    if (event.target === els.imageViewerDialog) {
+      closeImageViewer();
+    }
+  });
+  els.imageViewerStage.addEventListener("wheel", handleImageViewerWheel, { passive: false });
+  document.addEventListener("keydown", handleGlobalKeydown);
 
   Object.entries(imageFields).forEach(([key, field]) => {
     const box = els[field.input].closest("[data-image-field]");
@@ -605,7 +635,7 @@ function renderTags(tags) {
 
 function renderMedia(src, label) {
   const image = src
-    ? `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(label)}">`
+    ? `<button class="media-zoom-button" type="button" data-image-src="${escapeAttribute(src)}" data-image-title="${escapeAttribute(label)}" aria-label="Agrandir ${escapeAttribute(label)}"><img src="${escapeAttribute(src)}" alt="${escapeAttribute(label)}"></button>`
     : `<div class="media-empty">${escapeHtml(label)}<br>non ajoutee</div>`;
 
   return `
@@ -614,6 +644,69 @@ function renderMedia(src, label) {
       <figcaption>${escapeHtml(label)}</figcaption>
     </figure>
   `;
+}
+
+function openImageViewer(src, title) {
+  if (!src) return;
+
+  state.imageViewer.src = src;
+  state.imageViewer.title = title || "Photo";
+  state.imageViewer.zoom = 1;
+  els.imageViewerTitle.textContent = state.imageViewer.title;
+  els.imageViewerImg.src = src;
+  els.imageViewerImg.alt = state.imageViewer.title;
+  updateImageViewerZoom();
+  els.imageViewerDialog.showModal();
+}
+
+function closeImageViewer() {
+  if (!els.imageViewerDialog.open) return;
+
+  els.imageViewerDialog.close();
+  els.imageViewerImg.removeAttribute("src");
+  state.imageViewer.src = "";
+}
+
+function changeImageZoom(delta) {
+  setImageZoom(state.imageViewer.zoom + delta);
+}
+
+function setImageZoom(zoom) {
+  state.imageViewer.zoom = Math.min(4, Math.max(0.5, zoom));
+  updateImageViewerZoom();
+}
+
+function updateImageViewerZoom() {
+  els.imageViewerImg.style.transform = `scale(${state.imageViewer.zoom})`;
+  els.zoomResetBtn.textContent = `${Math.round(state.imageViewer.zoom * 100)}%`;
+}
+
+function handleImageViewerWheel(event) {
+  if (!els.imageViewerDialog.open) return;
+
+  event.preventDefault();
+  changeImageZoom(event.deltaY > 0 ? -0.15 : 0.15);
+}
+
+function handleGlobalKeydown(event) {
+  if (!els.imageViewerDialog.open) return;
+
+  if (event.key === "Escape") {
+    closeImageViewer();
+    return;
+  }
+
+  if (event.key === "+" || event.key === "=") {
+    changeImageZoom(0.25);
+  }
+
+  if (event.key === "-" || event.key === "_") {
+    changeImageZoom(-0.25);
+  }
+
+  if (event.key === "0") {
+    setImageZoom(1);
+  }
 }
 
 function renderStatus(results) {

@@ -211,6 +211,23 @@
       </form>
     </dialog>
 
+    <dialog id="imageViewerDialog" class="image-viewer-dialog">
+      <div class="image-viewer">
+        <div class="image-viewer-toolbar">
+          <strong id="imageViewerTitle">Photo</strong>
+          <div class="image-viewer-actions">
+            <button class="button" id="zoomOutBtn" type="button">-</button>
+            <button class="button" id="zoomResetBtn" type="button">100%</button>
+            <button class="button" id="zoomInBtn" type="button">+</button>
+            <button class="button ghost" id="closeImageViewerBtn" type="button">Fermer</button>
+          </div>
+        </div>
+        <div class="image-viewer-stage" id="imageViewerStage">
+          <img id="imageViewerImg" alt="">
+        </div>
+      </div>
+    </dialog>
+
     <datalist id="mapOptions">
       <option value="Ancient"></option>
       <option value="Anubis"></option>

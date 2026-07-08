@@ -425,6 +425,24 @@ textarea:focus {
   background: var(--panel-strong);
 }
 
+.media-zoom-button {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.media-zoom-button:focus-visible {
+  outline: 3px solid rgba(47, 143, 70, 0.45);
+  outline-offset: -3px;
+}
+
+.media-zoom-button:hover img {
+  filter: brightness(0.95);
+}
+
 .media-empty {
   min-height: 190px;
   aspect-ratio: 16 / 9;
@@ -479,6 +497,57 @@ dialog {
 
 dialog::backdrop {
   background: rgba(18, 28, 20, 0.38);
+}
+
+.image-viewer-dialog {
+  width: min(1180px, calc(100% - 24px));
+  max-width: none;
+  background: #0f1710;
+  color: white;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.image-viewer-dialog::backdrop {
+  background: rgba(5, 8, 6, 0.78);
+}
+
+.image-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(320px, 78vh);
+  gap: 12px;
+  padding: 12px;
+}
+
+.image-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.image-viewer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.image-viewer-stage {
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.05) 25%, transparent 25%) 0 0 / 18px 18px,
+    #101711;
+}
+
+.image-viewer-stage img {
+  max-width: min(100%, 1040px);
+  max-height: 72vh;
+  transform-origin: center center;
+  transition: transform 120ms ease;
+  object-fit: contain;
 }
 
 #lineupForm {
@@ -634,13 +703,15 @@ textarea {
 @media (max-width: 920px) {
   .topbar,
   .status-row,
-  .detail-header {
+  .detail-header,
+  .image-viewer-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
 
   .top-actions,
-  .detail-actions {
+  .detail-actions,
+  .image-viewer-actions {
     justify-content: flex-start;
   }
 
@@ -680,5 +751,10 @@ textarea {
   .form-grid,
   .upload-grid {
     grid-template-columns: 1fr;
+  }
+
+  .image-viewer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
