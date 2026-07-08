@@ -1,5 +1,17 @@
 const STORAGE_KEY = "cs2-lineups-v1";
 const AUTH_SESSION_KEY = "cs2-lineups-auth-v1";
+const GITHUB_SETTINGS_KEY = "cs2-lineups-github-settings-v1";
+const GITHUB_TOKEN_SESSION_KEY = "cs2-lineups-github-token-session-v1";
+const GITHUB_TOKEN_LOCAL_KEY = "cs2-lineups-github-token-local-v1";
+const GITHUB_API_VERSION = "2022-11-28";
+
+const DEFAULT_GITHUB_SETTINGS = Object.freeze({
+  owner: "",
+  repo: "",
+  branch: "main",
+  path: "data/lineups.json",
+  rememberToken: false
+});
 
 const AUTH_USERS = Object.freeze({
   storm_este: {
@@ -153,6 +165,8 @@ function cacheElements() {
     "sessionUser",
     "logoutBtn",
     "addLineupBtn",
+    "pushGitHubBtn",
+    "githubSettingsBtn",
     "exportBtn",
     "importInput",
     "resetBtn",
@@ -169,6 +183,16 @@ function cacheElements() {
     "dialogTitle",
     "closeDialogBtn",
     "cancelBtn",
+    "githubDialog",
+    "githubForm",
+    "closeGitHubDialogBtn",
+    "cancelGitHubBtn",
+    "githubOwnerInput",
+    "githubRepoInput",
+    "githubBranchInput",
+    "githubPathInput",
+    "githubTokenInput",
+    "rememberGitHubTokenInput",
     "nameInput",
     "mapInput",
     "placeInput",
@@ -191,6 +215,8 @@ function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
   els.logoutBtn.addEventListener("click", logout);
   els.addLineupBtn.addEventListener("click", () => openLineupDialog());
+  els.pushGitHubBtn.addEventListener("click", pushJsonToGitHub);
+  els.githubSettingsBtn.addEventListener("click", openGitHubDialog);
   els.exportBtn.addEventListener("click", exportJson);
   els.importInput.addEventListener("change", importJson);
   els.resetBtn.addEventListener("click", resetToRepoJson);
@@ -237,6 +263,9 @@ function bindEvents() {
   els.closeDialogBtn.addEventListener("click", closeLineupDialog);
   els.cancelBtn.addEventListener("click", closeLineupDialog);
   els.lineupForm.addEventListener("submit", saveLineupFromForm);
+  els.closeGitHubDialogBtn.addEventListener("click", closeGitHubDialog);
+  els.cancelGitHubBtn.addEventListener("click", closeGitHubDialog);
+  els.githubForm.addEventListener("submit", saveGitHubSettingsFromForm);
 
   Object.entries(imageFields).forEach(([key, field]) => {
     const box = els[field.input].closest("[data-image-field]");
@@ -721,11 +750,7 @@ function resetToRepoJson() {
 }
 
 function exportJson() {
-  const payload = {
-    schema: "cs2-lineups-v1",
-    exportedAt: new Date().toISOString(),
-    lineups: state.lineups
-  };
+  const payload = buildJsonPayload();
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -736,6 +761,205 @@ function exportJson() {
   link.remove();
   URL.revokeObjectURL(url);
   showToast("JSON exporte.");
+}
+
+function buildJsonPayload() {
+  return {
+    schema: "cs2-lineups-v1",
+    exportedAt: new Date().toISOString(),
+    lineups: state.lineups
+  };
+}
+
+function openGitHubDialog() {
+  const settings = loadGitHubSettings();
+  els.githubOwnerInput.value = settings.owner;
+  els.githubRepoInput.value = settings.repo;
+  els.githubBranchInput.value = settings.branch;
+  els.githubPathInput.value = settings.path;
+  els.rememberGitHubTokenInput.checked = settings.rememberToken;
+  els.githubTokenInput.value = "";
+  els.githubTokenInput.placeholder = getGitHubToken() ? "Token deja enregistre" : "Token GitHub";
+  els.githubDialog.showModal();
+  setTimeout(() => els.githubOwnerInput.focus(), 40);
+}
+
+function closeGitHubDialog() {
+  els.githubDialog.close();
+}
+
+function saveGitHubSettingsFromForm(event) {
+  event.preventDefault();
+
+  const settings = {
+    owner: els.githubOwnerInput.value.trim(),
+    repo: els.githubRepoInput.value.trim(),
+    branch: els.githubBranchInput.value.trim() || "main",
+    path: normalizeGitHubPath(els.githubPathInput.value),
+    rememberToken: els.rememberGitHubTokenInput.checked
+  };
+  const token = els.githubTokenInput.value.trim();
+
+  if (!settings.owner || !settings.repo || !settings.path) {
+    showToast("Owner, repo et chemin JSON sont obligatoires.");
+    return;
+  }
+
+  localStorage.setItem(GITHUB_SETTINGS_KEY, JSON.stringify(settings));
+  saveGitHubToken(token, settings.rememberToken);
+  closeGitHubDialog();
+  showToast("Config GitHub enregistree.");
+}
+
+async function pushJsonToGitHub() {
+  const settings = loadGitHubSettings();
+  const token = getGitHubToken();
+
+  if (!settings.owner || !settings.repo || !settings.path || !settings.branch || !token) {
+    openGitHubDialog();
+    showToast("Configure GitHub et ajoute un token avant de push.");
+    return;
+  }
+
+  const originalLabel = els.pushGitHubBtn.textContent;
+  els.pushGitHubBtn.disabled = true;
+  els.pushGitHubBtn.textContent = "Push...";
+  els.storageStatus.textContent = "Push GitHub en cours...";
+
+  try {
+    const sha = await getGitHubFileSha(settings, token);
+    const payload = buildJsonPayload();
+    const content = encodeBase64Utf8(JSON.stringify(payload, null, 2));
+    const body = {
+      message: `Update CS2 lineups - ${new Date().toLocaleString("fr-FR")}`,
+      content,
+      branch: settings.branch
+    };
+
+    if (sha) {
+      body.sha = sha;
+    }
+
+    const response = await fetch(githubContentUrl(settings), {
+      method: "PUT",
+      headers: githubHeaders(token),
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error(await readGitHubError(response));
+    }
+
+    showToast("JSON pousse sur GitHub.");
+    els.storageStatus.textContent = "JSON pousse sur GitHub - deploiement Pages en cours";
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "Push GitHub impossible.");
+    renderStatus(getVisibleLineups());
+  } finally {
+    els.pushGitHubBtn.disabled = false;
+    els.pushGitHubBtn.textContent = originalLabel;
+  }
+}
+
+async function getGitHubFileSha(settings, token) {
+  const response = await fetch(`${githubContentUrl(settings)}?ref=${encodeURIComponent(settings.branch)}`, {
+    headers: githubHeaders(token)
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(await readGitHubError(response));
+  }
+
+  const payload = await response.json();
+  return payload.sha || null;
+}
+
+function loadGitHubSettings() {
+  try {
+    const raw = localStorage.getItem(GITHUB_SETTINGS_KEY);
+    if (!raw) return { ...DEFAULT_GITHUB_SETTINGS };
+    return { ...DEFAULT_GITHUB_SETTINGS, ...JSON.parse(raw) };
+  } catch (error) {
+    console.warn("Config GitHub invalide.", error);
+    localStorage.removeItem(GITHUB_SETTINGS_KEY);
+    return { ...DEFAULT_GITHUB_SETTINGS };
+  }
+}
+
+function saveGitHubToken(token, rememberToken) {
+  if (!token) {
+    if (!rememberToken) {
+      localStorage.removeItem(GITHUB_TOKEN_LOCAL_KEY);
+    }
+    return;
+  }
+
+  if (rememberToken) {
+    localStorage.setItem(GITHUB_TOKEN_LOCAL_KEY, token);
+    sessionStorage.removeItem(GITHUB_TOKEN_SESSION_KEY);
+    return;
+  }
+
+  sessionStorage.setItem(GITHUB_TOKEN_SESSION_KEY, token);
+  localStorage.removeItem(GITHUB_TOKEN_LOCAL_KEY);
+}
+
+function getGitHubToken() {
+  return sessionStorage.getItem(GITHUB_TOKEN_SESSION_KEY) || localStorage.getItem(GITHUB_TOKEN_LOCAL_KEY) || "";
+}
+
+function githubContentUrl(settings) {
+  return `https://api.github.com/repos/${encodeURIComponent(settings.owner)}/${encodeURIComponent(settings.repo)}/contents/${encodeGitHubPath(settings.path)}`;
+}
+
+function githubHeaders(token) {
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    "X-GitHub-Api-Version": GITHUB_API_VERSION
+  };
+}
+
+async function readGitHubError(response) {
+  try {
+    const payload = await response.json();
+    return payload.message ? `GitHub: ${payload.message}` : `GitHub HTTP ${response.status}`;
+  } catch (error) {
+    return `GitHub HTTP ${response.status}`;
+  }
+}
+
+function normalizeGitHubPath(path) {
+  return String(path || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\\/g, "/");
+}
+
+function encodeGitHubPath(path) {
+  return normalizeGitHubPath(path)
+    .split("/")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+}
+
+function encodeBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+
+  return btoa(binary);
 }
 
 async function importJson(event) {

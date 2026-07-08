@@ -487,6 +487,12 @@ dialog::backdrop {
   padding: clamp(18px, 4vw, 28px);
 }
 
+#githubForm {
+  display: grid;
+  gap: 16px;
+  padding: clamp(18px, 4vw, 28px);
+}
+
 .dialog-heading,
 .dialog-actions {
   display: flex;
@@ -513,6 +519,26 @@ label {
   color: var(--muted);
   font-weight: 800;
   font-size: 0.88rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.form-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 input,

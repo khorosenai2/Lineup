@@ -37,6 +37,8 @@
       <div class="top-actions">
         <span class="session-pill" id="sessionUser"></span>
         <button class="button primary" id="addLineupBtn" type="button">+ Ajouter</button>
+        <button class="button primary" id="pushGitHubBtn" type="button">Push GitHub</button>
+        <button class="button" id="githubSettingsBtn" type="button">Config GitHub</button>
         <button class="button" id="exportBtn" type="button">Exporter JSON</button>
         <label class="button" for="importInput">Importer JSON</label>
         <input class="sr-only" id="importInput" type="file" accept=".json,application/json">
@@ -150,6 +152,60 @@
 
         <div class="dialog-actions">
           <button class="button ghost" id="cancelBtn" type="button">Annuler</button>
+          <button class="button primary" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="githubDialog">
+      <form id="githubForm" class="settings-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Synchronisation</p>
+            <h2>Config GitHub</h2>
+          </div>
+          <button class="icon-button" id="closeGitHubDialogBtn" type="button" aria-label="Fermer">x</button>
+        </div>
+
+        <p class="form-note">
+          Renseigne ton repo GitHub et un token fine-grained limite a ce repo avec la permission Contents: Read and write.
+        </p>
+
+        <div class="form-grid">
+          <label>
+            Owner / pseudo
+            <input id="githubOwnerInput" name="owner" required placeholder="tonpseudo">
+          </label>
+          <label>
+            Repo
+            <input id="githubRepoInput" name="repo" required placeholder="cs2-lineups">
+          </label>
+          <label>
+            Branche
+            <input id="githubBranchInput" name="branch" required placeholder="main" value="main">
+          </label>
+          <label>
+            Chemin du JSON
+            <input id="githubPathInput" name="path" required placeholder="data/lineups.json" value="data/lineups.json">
+          </label>
+        </div>
+
+        <label>
+          Token GitHub
+          <input id="githubTokenInput" name="token" type="password" autocomplete="off" placeholder="Token GitHub">
+        </label>
+
+        <label class="check-row">
+          <input id="rememberGitHubTokenInput" type="checkbox">
+          Garder le token sur cet appareil
+        </label>
+
+        <p class="form-note">
+          Si tu ne coches pas cette case, le token reste seulement pour l'onglet actuel.
+        </p>
+
+        <div class="dialog-actions">
+          <button class="button ghost" id="cancelGitHubBtn" type="button">Annuler</button>
           <button class="button primary" type="submit">Enregistrer</button>
         </div>
       </form>
