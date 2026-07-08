@@ -1023,9 +1023,12 @@ async function readGitHubFilePayload(payload, token) {
   const embeddedPayload = parseGitHubEmbeddedContent(payload);
   if (embeddedPayload) return embeddedPayload;
 
+  const blobPayload = await readGitHubBlobPayload(payload, token);
+  if (blobPayload) return blobPayload;
+
   if (payload.url) {
     const response = await fetchGitHub(payload.url, {
-      headers: githubHeaders(token, { raw: true })
+      headers: githubHeaders(token, { raw: true, version: true })
     }, "la lecture de la base");
 
     if (!response.ok) {
@@ -1033,11 +1036,25 @@ async function readGitHubFilePayload(payload, token) {
     }
 
     const text = await response.text();
-    const parsed = JSON.parse(text);
-    return parseGitHubEmbeddedContent(parsed) || parsed;
+    return parseGitHubJsonText(text);
   }
 
   throw new Error("GitHub: contenu de base introuvable.");
+}
+
+async function readGitHubBlobPayload(payload, token) {
+  if (!payload?.git_url) return null;
+
+  const response = await fetchGitHub(payload.git_url, {
+    headers: githubHeaders(token, { version: true })
+  }, "la lecture complete de la base");
+
+  if (!response.ok) {
+    throw new Error(await readGitHubError(response));
+  }
+
+  const blob = await response.json();
+  return parseGitHubEmbeddedContent(blob);
 }
 
 function parseGitHubEmbeddedContent(payload) {
@@ -1048,10 +1065,19 @@ function parseGitHubEmbeddedContent(payload) {
   }
 
   if (payload.content && payload.encoding !== "none") {
-    return JSON.parse(decodeBase64Utf8(payload.content));
+    return parseGitHubJsonText(decodeBase64Utf8(payload.content));
   }
 
   return null;
+}
+
+function parseGitHubJsonText(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return parseGitHubEmbeddedContent(parsed) || parsed;
+  } catch {
+    throw new Error("GitHub: le fichier de base n'est pas un JSON valide.");
+  }
 }
 
 function extractLineupsFromPayload(payload) {
