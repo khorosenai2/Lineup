@@ -610,6 +610,12 @@ label {
   line-height: 1.5;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 input,
 textarea {
   width: 100%;

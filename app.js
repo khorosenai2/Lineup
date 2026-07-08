@@ -1006,10 +1006,10 @@ async function getGitHubFileInfo(settings, token) {
 
   const payload = await response.json();
   const filePayload = await readGitHubFilePayload(payload, token);
-  const lineups = Array.isArray(filePayload) ? filePayload : filePayload.lineups;
+  const lineups = extractLineupsFromPayload(filePayload);
 
   if (!Array.isArray(lineups)) {
-    throw new Error("GitHub: format de base invalide.");
+    throw new Error(`GitHub: format de base invalide. Verifie que le chemin est bien "${settings.path}" et que le fichier contient une liste "lineups".`);
   }
 
   return {
@@ -1020,9 +1020,8 @@ async function getGitHubFileInfo(settings, token) {
 }
 
 async function readGitHubFilePayload(payload, token) {
-  if (payload.content && payload.encoding !== "none") {
-    return JSON.parse(decodeBase64Utf8(payload.content));
-  }
+  const embeddedPayload = parseGitHubEmbeddedContent(payload);
+  if (embeddedPayload) return embeddedPayload;
 
   if (payload.url) {
     const response = await fetchGitHub(payload.url, {
@@ -1033,10 +1032,32 @@ async function readGitHubFilePayload(payload, token) {
       throw new Error(await readGitHubError(response));
     }
 
-    return JSON.parse(await response.text());
+    const text = await response.text();
+    const parsed = JSON.parse(text);
+    return parseGitHubEmbeddedContent(parsed) || parsed;
   }
 
   throw new Error("GitHub: contenu de base introuvable.");
+}
+
+function parseGitHubEmbeddedContent(payload) {
+  if (!payload || typeof payload !== "object") return null;
+
+  if (Array.isArray(payload) || Array.isArray(payload.lineups)) {
+    return payload;
+  }
+
+  if (payload.content && payload.encoding !== "none") {
+    return JSON.parse(decodeBase64Utf8(payload.content));
+  }
+
+  return null;
+}
+
+function extractLineupsFromPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.lineups)) return payload.lineups;
+  return null;
 }
 
 function mergeLineups(remoteLineups, localLineups) {
