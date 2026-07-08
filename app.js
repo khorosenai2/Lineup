@@ -4,6 +4,12 @@ const GITHUB_SETTINGS_KEY = "cs2-lineups-github-settings-v1";
 const GITHUB_TOKEN_SESSION_KEY = "cs2-lineups-github-token-session-v1";
 const GITHUB_TOKEN_LOCAL_KEY = "cs2-lineups-github-token-local-v1";
 const GITHUB_API_VERSION = "2022-11-28";
+const STORAGE_DB_NAME = "cs2-lineups-storage-v1";
+const STORAGE_DB_VERSION = 1;
+const STORAGE_DB_STORE = "snapshots";
+const STORAGE_DB_LINEUPS_KEY = "lineups";
+const IMAGE_MAX_SIZE = 900;
+const IMAGE_JPEG_QUALITY = 0.72;
 
 const DEFAULT_GITHUB_SETTINGS = Object.freeze({
   owner: "",
@@ -152,7 +158,7 @@ async function loadAppData() {
   }
 
   state.baseLineups = normalizeLineups(await loadBaseLineups());
-  const saved = loadLocalLineups();
+  const saved = await loadStoredLineups();
   state.lineups = saved || state.baseLineups;
   state.hasLocalChanges = Boolean(saved);
   state.selectedId = state.lineups[0]?.id || null;
@@ -445,7 +451,20 @@ async function loadBaseLineups() {
   }
 }
 
-function loadLocalLineups() {
+async function loadStoredLineups() {
+  const indexedLineups = await loadLineupsFromIndexedDb();
+  if (indexedLineups) return indexedLineups;
+
+  const localLineups = loadLineupsFromLocalStorage();
+  if (localLineups) {
+    persistLineups(localLineups, { hasLocalChanges: true, showQuotaMessage: false });
+    return localLineups;
+  }
+
+  return null;
+}
+
+function loadLineupsFromLocalStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -453,7 +472,18 @@ function loadLocalLineups() {
     return normalizeLineups(Array.isArray(parsed) ? parsed : parsed.lineups || []);
   } catch (error) {
     console.warn("Sauvegarde locale invalide.", error);
-    localStorage.removeItem(STORAGE_KEY);
+    removeLocalStorageSnapshot();
+    return null;
+  }
+}
+
+async function loadLineupsFromIndexedDb() {
+  try {
+    const payload = await readFromLineupStore(STORAGE_DB_LINEUPS_KEY);
+    const lineups = Array.isArray(payload) ? payload : payload?.lineups;
+    return Array.isArray(lineups) ? normalizeLineups(lineups) : null;
+  } catch (error) {
+    console.warn("Stockage IndexedDB indisponible.", error);
     return null;
   }
 }
@@ -820,13 +850,7 @@ function deleteLineup(id) {
 }
 
 function saveLocalLineups() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ lineups: state.lineups }));
-    state.hasLocalChanges = true;
-  } catch (error) {
-    console.error(error);
-    showToast("Sauvegarde locale impossible. Reduis la taille des images ou sauvegarde sur GitHub.");
-  }
+  persistLineups(state.lineups, { hasLocalChanges: true });
 }
 
 function buildJsonPayload(lineups = state.lineups) {
@@ -842,8 +866,113 @@ function applyLineupsFromRemote(lineups) {
   state.baseLineups = state.lineups;
   state.selectedId = state.lineups[0]?.id || null;
   state.hasLocalChanges = false;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ lineups: state.lineups }));
+  persistLineups(state.lineups, { hasLocalChanges: false, showQuotaMessage: false });
   render();
+}
+
+function persistLineups(lineups, options = {}) {
+  const hasLocalChanges = options.hasLocalChanges ?? state.hasLocalChanges;
+  const showQuotaMessage = options.showQuotaMessage ?? true;
+  state.hasLocalChanges = hasLocalChanges;
+
+  saveLineupsToIndexedDb(lineups)
+    .then(() => {
+      removeLocalStorageSnapshot();
+    })
+    .catch((indexedDbError) => {
+      console.warn("Sauvegarde IndexedDB impossible, tentative localStorage.", indexedDbError);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ lineups }));
+      } catch (localStorageError) {
+        console.error(localStorageError);
+        if (showQuotaMessage) {
+          showToast("Stockage navigateur plein. Tes changements restent en memoire: pousse sur GitHub pour les garder.");
+        }
+        if (els.storageStatus) {
+          els.storageStatus.textContent = "Memoire temporaire - pousse sur GitHub pour sauvegarder";
+        }
+      }
+    });
+}
+
+function saveLineupsToIndexedDb(lineups) {
+  return writeToLineupStore(STORAGE_DB_LINEUPS_KEY, {
+    lineups,
+    savedAt: new Date().toISOString()
+  });
+}
+
+function readFromLineupStore(key) {
+  return useLineupStore("readonly", (store) => store.get(key));
+}
+
+function writeToLineupStore(key, value) {
+  return useLineupStore("readwrite", (store) => store.put(value, key));
+}
+
+function useLineupStore(mode, createRequest) {
+  return openLineupsDb().then((db) => new Promise((resolve, reject) => {
+    let result;
+    let settled = false;
+
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      db.close();
+      reject(error || new Error("IndexedDB error"));
+    };
+
+    const transaction = db.transaction(STORAGE_DB_STORE, mode);
+    transaction.oncomplete = () => {
+      if (settled) return;
+      settled = true;
+      db.close();
+      resolve(result);
+    };
+    transaction.onerror = () => fail(transaction.error);
+    transaction.onabort = () => fail(transaction.error || new Error("IndexedDB aborted"));
+
+    try {
+      const request = createRequest(transaction.objectStore(STORAGE_DB_STORE));
+      request.onsuccess = () => {
+        result = request.result;
+      };
+      request.onerror = () => fail(request.error);
+    } catch (error) {
+      fail(error);
+    }
+  }));
+}
+
+function openLineupsDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("IndexedDB unavailable"));
+      return;
+    }
+
+    const request = indexedDB.open(STORAGE_DB_NAME, STORAGE_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORAGE_DB_STORE)) {
+        db.createObjectStore(STORAGE_DB_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB open failed"));
+    request.onblocked = () => reject(new Error("IndexedDB open blocked"));
+  });
+}
+
+function removeLocalStorageSnapshot() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (error) {
+    console.warn("Nettoyage localStorage impossible.", error);
+  }
 }
 
 function openGitHubDialog() {
@@ -1363,8 +1492,7 @@ function fileToImageDataUrl(file) {
     const image = new Image();
 
     image.onload = () => {
-      const maxSize = 1200;
-      const ratio = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const ratio = Math.min(1, IMAGE_MAX_SIZE / Math.max(image.width, image.height));
       const width = Math.max(1, Math.round(image.width * ratio));
       const height = Math.max(1, Math.round(image.height * ratio));
       const canvas = document.createElement("canvas");
@@ -1373,7 +1501,7 @@ function fileToImageDataUrl(file) {
       const context = canvas.getContext("2d");
       context.drawImage(image, 0, 0, width, height);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
+      resolve(canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY));
     };
 
     image.onerror = () => {
