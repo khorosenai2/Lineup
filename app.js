@@ -24,6 +24,8 @@ const AUTH_USERS = Object.freeze({
   }
 });
 
+const GRENADE_TAGS = Object.freeze(["HE", "Flash", "Smoke", "Molo"]);
+
 const fallbackLineups = [
   {
     id: "demo-mirage-smoke-jungle",
@@ -33,7 +35,7 @@ const fallbackLineups = [
     place: "T spawn",
     instructions: "1. Place-toi au T spawn.\n2. Aligne ton viseur avec le repere choisi.\n3. Lance la smoke en jumpthrow.",
     result: "La smoke doit bloquer Jungle pour faciliter une prise mid ou une exec A.",
-    tags: ["smoke", "jungle", "mid", "demo"],
+    tags: ["Smoke"],
     images: { place: "", position: "", aim: "", result: "" },
     createdAt: "2026-07-08T00:00:00.000Z",
     updatedAt: "2026-07-08T00:00:00.000Z"
@@ -46,7 +48,7 @@ const fallbackLineups = [
     place: "Banana",
     instructions: "1. Bloque-toi sur le coin indique.\n2. Vise le repere sur le mur.\n3. Lance en clic gauche.",
     result: "La molotov force le joueur cache a Dark a sortir ou a reculer.",
-    tags: ["molotov", "banana", "dark", "demo"],
+    tags: ["Molo"],
     images: { place: "", position: "", aim: "", result: "" },
     createdAt: "2026-07-08T00:00:00.000Z",
     updatedAt: "2026-07-08T00:00:00.000Z"
@@ -59,7 +61,7 @@ const fallbackLineups = [
     place: "T spawn",
     instructions: "1. Positionne-toi sur le repere.\n2. Vise le haut du batiment.\n3. Lance avec un jumpthrow.",
     result: "La smoke couvre Xbox pour passer catwalk plus facilement.",
-    tags: ["smoke", "xbox", "catwalk", "demo"],
+    tags: ["Smoke"],
     images: { place: "", position: "", aim: "", result: "" },
     createdAt: "2026-07-08T00:00:00.000Z",
     updatedAt: "2026-07-08T00:00:00.000Z"
@@ -737,7 +739,7 @@ function openLineupDialog(lineup = null) {
   els.nameInput.value = lineup?.name || "";
   els.mapInput.value = lineup?.map || "";
   els.placeInput.value = lineup?.place || "";
-  els.tagsInput.value = lineup?.tags?.join(", ") || "";
+  els.tagsInput.value = getGrenadeTag(lineup?.tags) || "";
   els.descriptionInput.value = lineup?.description || "";
   els.instructionsInput.value = lineup?.instructions || "";
   els.resultInput.value = lineup?.result || "";
@@ -764,9 +766,10 @@ function saveLineupFromForm(event) {
   const name = els.nameInput.value.trim();
   const map = els.mapInput.value.trim();
   const place = els.placeInput.value.trim();
+  const grenade = normalizeGrenadeTag(els.tagsInput.value);
 
-  if (!name || !map || !place) {
-    showToast("Nom, map et lieu sont obligatoires.");
+  if (!name || !map || !place || !grenade) {
+    showToast("Nom, map, lieu et grenade sont obligatoires.");
     return;
   }
 
@@ -778,7 +781,7 @@ function saveLineupFromForm(event) {
     description: els.descriptionInput.value.trim(),
     instructions: els.instructionsInput.value.trim(),
     result: els.resultInput.value.trim(),
-    tags: splitTags(els.tagsInput.value),
+    tags: [grenade],
     images: {
       place: state.pendingImages.place ?? existing?.images?.place ?? "",
       position: state.pendingImages.position ?? existing?.images?.position ?? "",
@@ -925,7 +928,7 @@ async function pushJsonToGitHub() {
     els.storageStatus.textContent = "Sauvegarde envoyee sur GitHub - deploiement Pages en cours";
   } catch (error) {
     console.error(error);
-    showToast(error.message || "Push GitHub impossible.");
+    handleGitHubActionError(error, "Push GitHub impossible.");
     renderStatus(getVisibleLineups());
   } finally {
     els.pushGitHubBtn.disabled = false;
@@ -955,7 +958,7 @@ async function reloadFromGitHub() {
     showToast("Derniere base GitHub recuperee.");
   } catch (error) {
     console.error(error);
-    showToast(error.message || "Reload GitHub impossible.");
+    handleGitHubActionError(error, "Reload GitHub impossible.");
     renderStatus(getVisibleLineups());
   } finally {
     els.reloadGitHubBtn.disabled = false;
@@ -1145,6 +1148,28 @@ function getGitHubToken() {
   return sessionStorage.getItem(GITHUB_TOKEN_SESSION_KEY) || localStorage.getItem(GITHUB_TOKEN_LOCAL_KEY) || "";
 }
 
+function clearSavedGitHubToken() {
+  sessionStorage.removeItem(GITHUB_TOKEN_SESSION_KEY);
+  localStorage.removeItem(GITHUB_TOKEN_LOCAL_KEY);
+}
+
+function handleGitHubActionError(error, fallbackMessage) {
+  const message = error.message || fallbackMessage;
+
+  if (isGitHubAuthError(message)) {
+    clearSavedGitHubToken();
+    openGitHubDialog();
+    showToast("Token GitHub invalide ou expire. Colle un nouveau token dans Config GitHub.");
+    return;
+  }
+
+  showToast(message);
+}
+
+function isGitHubAuthError(message) {
+  return /bad credentials|token invalide|401|requires authentication/i.test(message);
+}
+
 function githubContentUrl(settings) {
   return `https://api.github.com/repos/${encodeURIComponent(settings.owner)}/${encodeURIComponent(settings.repo)}/contents/${encodeGitHubPath(settings.path)}`;
 }
@@ -1195,6 +1220,15 @@ function buildGitHubNetworkMessage(actionLabel) {
 async function readGitHubError(response) {
   try {
     const payload = await response.json();
+
+    if (response.status === 401 || /bad credentials/i.test(payload.message || "")) {
+      return "GitHub: token invalide ou expire. Recolle un nouveau token dans Config GitHub.";
+    }
+
+    if (response.status === 403) {
+      return "GitHub: acces refuse. Verifie que le token a la permission Contents: Read and write sur ce repo.";
+    }
+
     return payload.message ? `GitHub: ${payload.message}` : `GitHub HTTP ${response.status}`;
   } catch (error) {
     return `GitHub HTTP ${response.status}`;
@@ -1477,6 +1511,33 @@ function splitTags(value) {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function getGrenadeTag(tags) {
+  const values = Array.isArray(tags) ? tags : splitTags(tags);
+  return values.map(normalizeGrenadeTag).find(Boolean) || "";
+}
+
+function normalizeGrenadeTag(value) {
+  const normalized = normalizeText(value);
+
+  if (normalized === "he" || normalized === "nade" || normalized === "grenade" || normalized === "explosive") {
+    return "HE";
+  }
+
+  if (normalized === "flash" || normalized === "flashbang" || normalized === "popflash") {
+    return "Flash";
+  }
+
+  if (normalized === "smoke" || normalized === "smok" || normalized === "fumee" || normalized === "fumigene") {
+    return "Smoke";
+  }
+
+  if (normalized === "molo" || normalized === "molotov" || normalized === "incendiaire" || normalized === "feu") {
+    return "Molo";
+  }
+
+  return GRENADE_TAGS.includes(value) ? value : "";
 }
 
 function sortByUpdatedAt(a, b) {

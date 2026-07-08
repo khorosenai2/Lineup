@@ -100,8 +100,14 @@
             <input id="placeInput" name="place" required maxlength="90" placeholder="T spawn, banana, ramp...">
           </label>
           <label>
-            Tags
-            <input id="tagsInput" name="tags" maxlength="160" placeholder="smoke, jungle, execute A">
+            Grenade
+            <select id="tagsInput" name="tags" required>
+              <option value="" disabled selected>Choisis une grenade</option>
+              <option value="HE">HE</option>
+              <option value="Flash">Flash</option>
+              <option value="Smoke">Smoke</option>
+              <option value="Molo">Molo</option>
+            </select>
           </label>
         </div>
 
