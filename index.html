@@ -12,7 +12,7 @@
       <form class="login-card" id="loginForm" autocomplete="off">
         <p class="eyebrow">Acces prive</p>
         <h1>CS2 Lineup Vault</h1>
-        <p class="login-copy">Connecte-toi pour acceder aux lineups et gerer la base JSON.</p>
+        <p class="login-copy">Connecte-toi pour acceder aux lineups et gerer la base.</p>
 
         <label>
           Identifiant
@@ -52,7 +52,7 @@
         </div>
         <div class="status-row">
           <span id="aiStatus"></span>
-          <span id="storageStatus">Chargement du JSON...</span>
+          <span id="storageStatus">Chargement...</span>
         </div>
         <div class="filters" id="mapFilters" aria-label="Filtres par map"></div>
       </section>
@@ -181,7 +181,7 @@
             <input id="githubBranchInput" name="branch" required placeholder="main" value="main">
           </label>
           <label>
-            Chemin du JSON
+            Chemin de la base
             <input id="githubPathInput" name="path" required placeholder="data/lineups.json" value="data/lineups.json">
           </label>
         </div>

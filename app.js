@@ -28,7 +28,7 @@ const fallbackLineups = [
   {
     id: "demo-mirage-smoke-jungle",
     name: "Exemple : Smoke Jungle depuis T spawn",
-    description: "Exemple de fiche pour montrer le format. Remplace les infos par une vraie lineup verifiee avant de partager le JSON.",
+    description: "Exemple de fiche pour montrer le format. Remplace les infos par une vraie lineup verifiee avant de partager la base.",
     map: "Mirage",
     place: "T spawn",
     instructions: "1. Place-toi au T spawn.\n2. Aligne ton viseur avec le repere choisi.\n3. Lance la smoke en jumpthrow.",
@@ -172,9 +172,6 @@ function cacheElements() {
     "addLineupBtn",
     "pushGitHubBtn",
     "githubSettingsBtn",
-    "exportBtn",
-    "importInput",
-    "resetBtn",
     "searchInput",
     "clearSearchBtn",
     "aiStatus",
@@ -230,9 +227,6 @@ function bindEvents() {
   els.addLineupBtn.addEventListener("click", () => openLineupDialog());
   els.pushGitHubBtn.addEventListener("click", pushJsonToGitHub);
   els.githubSettingsBtn.addEventListener("click", openGitHubDialog);
-  els.exportBtn.addEventListener("click", exportJson);
-  els.importInput.addEventListener("change", importJson);
-  els.resetBtn.addEventListener("click", resetToRepoJson);
   els.searchInput.addEventListener("input", () => {
     state.query = els.searchInput.value;
     render();
@@ -711,7 +705,7 @@ function handleGlobalKeydown(event) {
 
 function renderStatus(results) {
   const query = state.query.trim();
-  const source = state.hasLocalChanges ? "Version locale modifiee" : "JSON du repo";
+  const source = state.hasLocalChanges ? "Version locale modifiee" : "Base en ligne";
   els.storageStatus.textContent = `${source} - ${state.lineups.length} lineups en memoire`;
 
   if (!query) {
@@ -826,34 +820,8 @@ function saveLocalLineups() {
     state.hasLocalChanges = true;
   } catch (error) {
     console.error(error);
-    showToast("Sauvegarde locale impossible. Exporte le JSON ou reduis la taille des images.");
+    showToast("Sauvegarde locale impossible. Reduis la taille des images ou sauvegarde sur GitHub.");
   }
-}
-
-function resetToRepoJson() {
-  const confirmed = window.confirm("Recharger le JSON du repo et effacer les modifications locales ?");
-  if (!confirmed) return;
-
-  localStorage.removeItem(STORAGE_KEY);
-  state.lineups = state.baseLineups;
-  state.hasLocalChanges = false;
-  state.selectedId = state.lineups[0]?.id || null;
-  render();
-  showToast("JSON du repo recharge.");
-}
-
-function exportJson() {
-  const payload = buildJsonPayload();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "lineups.json";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  showToast("JSON exporte.");
 }
 
 function buildJsonPayload() {
@@ -894,7 +862,7 @@ function saveGitHubSettingsFromForm(event) {
   const token = els.githubTokenInput.value.trim();
 
   if (!settings.owner || !settings.repo || !settings.path) {
-    showToast("Owner, repo et chemin JSON sont obligatoires.");
+    showToast("Owner, repo et chemin de base sont obligatoires.");
     return;
   }
 
@@ -943,8 +911,8 @@ async function pushJsonToGitHub() {
       throw new Error(await readGitHubError(response));
     }
 
-    showToast("JSON pousse sur GitHub.");
-    els.storageStatus.textContent = "JSON pousse sur GitHub - deploiement Pages en cours";
+    showToast("Sauvegarde envoyee sur GitHub.");
+    els.storageStatus.textContent = "Sauvegarde envoyee sur GitHub - deploiement Pages en cours";
   } catch (error) {
     console.error(error);
     showToast(error.message || "Push GitHub impossible.");
@@ -1053,29 +1021,6 @@ function encodeBase64Utf8(value) {
   }
 
   return btoa(binary);
-}
-
-async function importJson(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  try {
-    const text = await file.text();
-    const payload = JSON.parse(text);
-    const imported = Array.isArray(payload) ? payload : payload.lineups;
-    if (!Array.isArray(imported)) throw new Error("Format invalide");
-
-    state.lineups = normalizeLineups(imported);
-    state.selectedId = state.lineups[0]?.id || null;
-    saveLocalLineups();
-    render();
-    showToast("JSON importe.");
-  } catch (error) {
-    console.error(error);
-    showToast("Import impossible : JSON invalide.");
-  } finally {
-    event.target.value = "";
-  }
 }
 
 async function handleImagePaste(event, key) {
