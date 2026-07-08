@@ -1020,20 +1020,20 @@ async function getGitHubFileInfo(settings, token) {
 }
 
 async function readGitHubFilePayload(payload, token) {
-  if (payload.content) {
+  if (payload.content && payload.encoding !== "none") {
     return JSON.parse(decodeBase64Utf8(payload.content));
   }
 
-  if (payload.download_url) {
-    const response = await fetchGitHub(payload.download_url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
+  if (payload.url) {
+    const response = await fetchGitHub(payload.url, {
+      headers: githubHeaders(token, { raw: true })
     }, "la lecture de la base");
 
     if (!response.ok) {
-      throw new Error(`GitHub: lecture de la base impossible (${response.status}).`);
+      throw new Error(await readGitHubError(response));
     }
 
-    return response.json();
+    return JSON.parse(await response.text());
   }
 
   throw new Error("GitHub: contenu de base introuvable.");
@@ -1104,7 +1104,7 @@ function githubContentUrl(settings) {
 
 function githubHeaders(token, options = {}) {
   const headers = {
-    Accept: "application/vnd.github+json"
+    Accept: options.raw ? "application/vnd.github.raw+json" : "application/vnd.github+json"
   };
 
   if (options.json) {
@@ -1141,7 +1141,7 @@ function buildGitHubNetworkMessage(actionLabel) {
     hints.push("Ton navigateur semble hors ligne.");
   }
 
-  hints.push("Verifie internet, le token, le repo, ou un bloqueur/VPN qui peut bloquer api.github.com.");
+  hints.push("Recharge la page, verifie le token/repo, ou regarde si un bloqueur, VPN ou pare-feu bloque api.github.com.");
   return hints.join(" ");
 }
 
