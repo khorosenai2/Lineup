@@ -739,7 +739,7 @@ function openLineupDialog(lineup = null) {
   els.nameInput.value = lineup?.name || "";
   els.mapInput.value = lineup?.map || "";
   els.placeInput.value = lineup?.place || "";
-  els.tagsInput.value = getGrenadeTag(lineup?.tags) || "";
+  setSelectedGrenadeTags(getGrenadeTags(lineup?.tags));
   els.descriptionInput.value = lineup?.description || "";
   els.instructionsInput.value = lineup?.instructions || "";
   els.resultInput.value = lineup?.result || "";
@@ -766,10 +766,10 @@ function saveLineupFromForm(event) {
   const name = els.nameInput.value.trim();
   const map = els.mapInput.value.trim();
   const place = els.placeInput.value.trim();
-  const grenade = normalizeGrenadeTag(els.tagsInput.value);
+  const grenades = getSelectedGrenadeTags();
 
-  if (!name || !map || !place || !grenade) {
-    showToast("Nom, map, lieu et grenade sont obligatoires.");
+  if (!name || !map || !place || !grenades.length) {
+    showToast("Nom, map, lieu et au moins une grenade sont obligatoires.");
     return;
   }
 
@@ -781,7 +781,7 @@ function saveLineupFromForm(event) {
     description: els.descriptionInput.value.trim(),
     instructions: els.instructionsInput.value.trim(),
     result: els.resultInput.value.trim(),
-    tags: [grenade],
+    tags: grenades,
     images: {
       place: state.pendingImages.place ?? existing?.images?.place ?? "",
       position: state.pendingImages.position ?? existing?.images?.position ?? "",
@@ -1513,9 +1513,27 @@ function splitTags(value) {
     .filter(Boolean);
 }
 
-function getGrenadeTag(tags) {
+function getGrenadeTags(tags) {
   const values = Array.isArray(tags) ? tags : splitTags(tags);
-  return values.map(normalizeGrenadeTag).find(Boolean) || "";
+  const grenades = values
+    .map(normalizeGrenadeTag)
+    .filter(Boolean);
+
+  return GRENADE_TAGS.filter((tag) => grenades.includes(tag));
+}
+
+function getSelectedGrenadeTags() {
+  return Array.from(els.tagsInput.querySelectorAll("input[type='checkbox']:checked"))
+    .map((input) => normalizeGrenadeTag(input.value))
+    .filter(Boolean);
+}
+
+function setSelectedGrenadeTags(tags) {
+  const selected = new Set(getGrenadeTags(tags));
+
+  els.tagsInput.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
 }
 
 function normalizeGrenadeTag(value) {

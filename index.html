@@ -100,14 +100,25 @@
             <input id="placeInput" name="place" required maxlength="90" placeholder="T spawn, banana, ramp...">
           </label>
           <label>
-            Grenade
-            <select id="tagsInput" name="tags" required>
-              <option value="" disabled selected>Choisis une grenade</option>
-              <option value="HE">HE</option>
-              <option value="Flash">Flash</option>
-              <option value="Smoke">Smoke</option>
-              <option value="Molo">Molo</option>
-            </select>
+            Grenades
+            <span class="grenade-options" id="tagsInput" role="group" aria-label="Grenades">
+              <span class="grenade-option">
+                <input type="checkbox" name="tags" value="HE">
+                HE
+              </span>
+              <span class="grenade-option">
+                <input type="checkbox" name="tags" value="Flash">
+                Flash
+              </span>
+              <span class="grenade-option">
+                <input type="checkbox" name="tags" value="Smoke">
+                Smoke
+              </span>
+              <span class="grenade-option">
+                <input type="checkbox" name="tags" value="Molo">
+                Molo
+              </span>
+            </span>
           </label>
         </div>
 
